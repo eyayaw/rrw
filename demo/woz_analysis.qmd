@@ -12,7 +12,7 @@ format:
     code-tools: true
     fig-width: 8
     fig-height: 5
-    #embed-resources: true # tampers with embed-preview.html
+    embed-resources: true # tampers with embed-preview.html
     theme: cosmo
   pdf:
     link-citations: true

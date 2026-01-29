@@ -10,7 +10,7 @@
 
 ## Slides
 
-[Reproducible Research Wokflows](./index.html), source [index.qmd](./index.qmd)
+[Reproducible Research Wokflows](https://eyayaw.github.io/rrw/index.html), source [index.qmd](./index.qmd)
 
 ## Requirements
 
@@ -59,7 +59,8 @@ brew install quarto
 
 ## The WOZ demo
 
-The demo lives in `demo/woz_analysis.qmd`.
+The demo source lives in [`demo/woz_analysis.qmd`](./demo/woz_analysis.qmd).
+Click on [demo/woz_analysis.html](https://eyayaw.github.io/rrw/demo/woz_analysis.html) to see the rendered version.
 
 You can render it via the following command:
 
