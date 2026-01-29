@@ -1,5 +1,11 @@
 # Reproducible Research Workflows
 
+
+> [!IMPORTANT]
+> [Slides](https://eyayaw.github.io/rrw)
+> 
+> [Demo](https://eyayaw.github.io/rrw/demo/woz_analysis.html)
+
 ## Core components
 
 - Project organization
