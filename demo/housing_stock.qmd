@@ -1,0 +1,54 @@
+---
+title: "Housing Stock Analysis"
+format: html
+jupyter: python3
+execute:
+  echo: true
+---
+
+```{python}
+#| label: fig-housing-stock
+#| fig-cap: "Housing Stock Trends in Major Dutch Cities"
+#| code-fold: true
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Load data
+df = pd.read_csv("data/processed/kwb_housing.csv")
+
+# Filter to gemeente level and G4 cities
+g4_codes = {"GM0363": "Amsterdam", "GM0599": "Rotterdam",
+            "GM0518": "Den Haag", "GM0344": "Utrecht"}
+g4 = df[(df["region_type"] == "gemeente") & (df["region"].isin(g4_codes.keys()))].copy()
+g4["city"] = g4["region"].map(g4_codes)
+
+# Pivot for plotting
+fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+
+variables = [
+    ("woningvoorraad", "Total Housing Stock"),
+    ("koopwoningen", "Owner-occupied (%)"),
+    ("huurwoningen", "Rental (%)"),
+]
+
+colors = {"Amsterdam": "#1b9e77", "Rotterdam": "#d95f02",
+          "Den Haag": "#7570b3", "Utrecht": "#e7298a"}
+
+for ax, (var, title) in zip(axes, variables):
+    for city in g4_codes.values():
+        city_data = g4[g4["city"] == city].sort_values("year")
+        ax.plot(city_data["year"], city_data[var],
+                label=city, color=colors[city], linewidth=1.5)
+    ax.set_title(title)
+    ax.set_xlabel("Year")
+    ax.spines[["top", "right"]].set_visible(False)
+
+axes[0].set_ylabel("Number of dwellings")
+axes[1].set_ylabel("Percentage")
+axes[2].set_ylabel("Percentage")
+axes[2].legend(loc="upper right", frameon=False)
+
+plt.tight_layout()
+plt.show()
+```

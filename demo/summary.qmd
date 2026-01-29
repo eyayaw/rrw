@@ -1,0 +1,92 @@
+---
+title: "WOZ Summary Statistics"
+format: html 
+execute:
+  echo: true
+---
+
+```{r}
+#| label: fig-cagr-distribution
+#| fig-cap: "Distribution of Compound Annual Growth Rates"
+
+library(data.table)
+library(ggplot2)
+
+source("scripts/constants.R")
+
+# Load the CBS housing data
+housing = fread("data/processed/kwb_housing.csv")
+
+# Filter to gemeente level with valid WOZ data
+housing_mun = housing[region_type == "gemeente" & !is.na(woz), ]
+
+# Calculate CAGR for each gemeente
+cagr_df = dcast(
+  housing_mun[year %in% c(START_YEAR, END_YEAR), .(region, year, woz)],
+  region ~ year,
+  value.var = "woz"
+)
+setnames(cagr_df, as.character(c(START_YEAR, END_YEAR)), c("woz_start", "woz_end"))
+cagr_df = cagr_df[!is.na(woz_start) & !is.na(woz_end), ]
+cagr_df[, cagr := ((woz_end / woz_start)^(1/n_years) - 1) * 100]
+
+# Plot distribution
+ggplot(cagr_df, aes(x = cagr)) +
+  geom_histogram(bins = 30, fill = "#2c7bb6", color = "white", alpha = 0.7) +
+  geom_vline(
+    xintercept = mean(cagr_df$cagr),
+    color = "#d7191c", linetype = "dashed", linewidth = 1
+  ) +
+  geom_vline(
+    xintercept = median(cagr_df$cagr),
+    color = "#fdae61", linetype = "dotdash", linewidth = 1
+  ) +
+  annotate(
+    "text", x = mean(cagr_df$cagr) + 1, y = Inf, vjust = 2,
+    label = sprintf("Mean: %.1f%%", mean(cagr_df$cagr)),
+    color = "#d7191c", fontface = "bold"
+  ) +
+  annotate(
+    "text", x = median(cagr_df$cagr) - 1, y = Inf, vjust = 4,
+    label = sprintf("Median: %.1f%%", median(cagr_df$cagr)),
+    color = "#fdae61", fontface = "bold"
+  ) +
+  labs(
+    x = "CAGR (%)",
+    y = "Number of Municipalities"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.minor = element_blank())
+```
+
+```{r}
+#| label: tbl-summary-stats
+#| tbl-cap: "Summary Statistics: WOZ Growth by Municipality"
+
+summary_dt = data.table(
+  Statistic = c("Count", "Mean", "Std Dev", "Min", "25%", "Median", "75%", "Max"),
+  `CAGR (%)` = c(
+    format(nrow(cagr_df), big.mark = ","),
+    sprintf("%.2f", mean(cagr_df$cagr)),
+    sprintf("%.2f", sd(cagr_df$cagr)),
+    sprintf("%.2f", min(cagr_df$cagr)),
+    sprintf("%.2f", quantile(cagr_df$cagr, 0.25)),
+    sprintf("%.2f", median(cagr_df$cagr)),
+    sprintf("%.2f", quantile(cagr_df$cagr, 0.75)),
+    sprintf("%.2f", max(cagr_df$cagr))
+  ),
+  woz_end_col = c(
+    format(nrow(cagr_df), big.mark = ","),
+    sprintf("%.0f", mean(cagr_df$woz_end)),
+    sprintf("%.0f", sd(cagr_df$woz_end)),
+    sprintf("%.0f", min(cagr_df$woz_end)),
+    sprintf("%.0f", quantile(cagr_df$woz_end, 0.25)),
+    sprintf("%.0f", median(cagr_df$woz_end)),
+    sprintf("%.0f", quantile(cagr_df$woz_end, 0.75)),
+    sprintf("%.0f", max(cagr_df$woz_end))
+  )
+)
+setnames(summary_dt, "woz_end_col", paste0("WOZ ", END_YEAR, " (€1000)"))
+
+knitr::kable(summary_dt)
+```

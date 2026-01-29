@@ -1,0 +1,6 @@
+project:
+  type: default
+  render:
+     # - summary.qmd
+     # - housing_stock.qmd
+     - woz_analysis.qmd

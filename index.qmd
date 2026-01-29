@@ -1,0 +1,463 @@
+---
+title: "[Reproducible Research Workflows]{.blue}"
+subtitle: "*[Lessons from Writing a Dissertation with `Quarto`]{.green}*"
+author: "Eyayaw Beze"
+institute: '[**AMS Institute**]{style="color: #E0001B"}'
+date: "2026-01-29"
+date-format: "MMMM DD, YYYY"
+format:
+  revealjs:
+    theme: default
+    transition: fade
+    slide-number: c/t
+    width: 1280
+    height: 720
+footer: '[*Reproducible Research Workflows*]{.blue} $\cdotp$ [*AMS Institute*]{style="color: #E0001B"} $\cdotp$ [*All-hands monthly*]{.green}'
+code-line-numbers: false
+css: style.css
+include-in-header:
+  - text: <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet"/>
+bibliography: references.bib
+self-contained-math: true
+logo: docs/images/ams-logo.svg
+---
+
+## My old workflow
+
+::: {.incremental}
+1. Writing happens in a Word <i class="fa-solid fa-file-word"></i> document
+2. Open dataset in Excel <i class="fa-solid fa-file-excel"></i> → summary stats → copy/paste → describe
+3. Create figure in Stata/QGIS → save to file → paste into Word → manual formatting
+4. Present at seminars/confs, submit paper, ...
+5. "Reviewer #2: please change var x threshold"
+6. 😰 *"How did I clean the data?" "How did I make that figure?" "How many things should I update?"*
+:::
+
+. . .
+
+[**Sounds familiar?**]{.red style="font-size:1.5em;"} 🤔
+
+
+## The Core Problem
+
+Our analyses live in **fragments**:
+
+| Step | Tool | Format |
+|------|------|--------|
+| Data cleaning | Excel/Python | `.xlsx`, `.py` |
+| Statistics | Stata/R | `.do`, `.R`, `.py` |
+| Figures | QGIS/matplotlib | `.png`, `.jpeg`, `.pdf` |
+| Writing | Word/LaTeX | `.docx`, `.tex` |
+| Presentation | PowerPoint | `.pptx` |
+
+- Manual copy-paste between tools
+- No single source of truth, version chaos
+
+## Why Reproducibility Matters
+
+::: {.columns}
+::: {.column width="50%"}
+
+- Pick up where you left off—even after months
+- One change updates everything
+- "It worked on my machine" $\downarrow$
+:::
+
+::: {.column width="50%"}
+
+- Reproducibility crisis is real^[See [Data Colada on Gino case](https://datacolada.org/118)]
+- Journals increasingly require code/data
+- Reviewers can verify your results
+- Others can build on your work
+:::
+:::
+
+## The goal of this talk
+
+Move from **fragmented** to **integrated, reproducible workflows**
+
+::: {.columns}
+::: {.column width="50%"}
+### From
+```sh
+data.xlsx
+analysis_v3_FINAL.do
+figure1_old.png
+first_draft.docx
+first_draft_rev.docx
+final_draft_v3.docx
+final_final_draft.docx
+final_final_draft.pdf
+```
+:::
+
+::: {.column width="50%"}
+### To
+```sh
+project/
+├── data/raw/
+├── data/processed/
+├── docs/
+├── scripts/
+├── output/
+├── README.md
+├── article.pdf  # ← generated
+└── article.qmd  # ← single source
+```
+
+*Load data, run analysis, generate figures/tables, render to PDF/Word*
+:::
+:::
+
+
+## Core Pillars of RRW
+
+1. Project Organization
+2. Version Controlling
+3. Dependency Management
+4. [Literate Programming]{.green}
+
+::: {.notes}
+You likely know git. Dependency management ensures your code runs later. But literate programming is what makes your research understandable---to others and your future self.
+:::
+
+## 1. Project Organization {.smaller}
+
+A consistent folder structure makes everything easier:
+
+::: columns
+::: column
+```sh
+project/
+├── data/
+│   ├── raw/
+│   └── processed/
+├── docs/
+│   └── literature/
+├── scripts/
+│   ├── cleaning/
+│   ├── estimation/
+│   └── visualization/
+├── output/
+│   └── figs/
+└── README.md
+```
+:::
+::: column
+```sh
+dissertation/
+├── chapter-1/    # git submodule
+├── chapter-2/    # ...
+├── chapter-3/    # ...
+└── index.qmd     # main document
+```
+<br>
+```sh
+# dissertation/index.qmd
+{{{< include chapter-1/index.qmd >}}}
+\newpage
+{{{< include chapter-2/index.qmd >}}}
+\newpage
+{{{< include chapter-3/index.qmd >}}}
+```
+
+:::
+:::
+
+**A repo per project**
+
+- Each research project lives in its own folder
+- Self-contained: data, code, outputs together
+- For cumulative dissertations: git submodules
+
+
+## 2. Version Control with Git {footer=false}
+
+::: columns
+::: {.column width=40%}
+[Have you experienced this?]{style="color:red;"}
+![](http://www.phdcomics.com/comics/archive/phd101212s.gif){height=6in}
+:::
+::: {.column width=60%}
+::: {style="font-size:smaller;"}
+
+Git tracks changes to your files over time.
+
+**Key concepts:**
+
+- **Repository**: The project folder, tracked by git
+- **Commit**: A snapshot of the project at a point in time
+- **Remote**: A backup on GitHub/GitLab
+
+```diff
+<!--draft.qmd--> → <!--draft.pdf-->
+
+## Introduction
+
+- We analyze housing prices in the Netherlands from 2015 to 2024.
++ We analyze housing prices, in the Netherlands from 2015 to 2024.
+```
+
+:::
+:::
+:::
+----
+
+### Git workflow
+
+::: panel-tabset
+
+## Basic Commands
+```sh
+# Initialize a repository
+git init
+
+# Stage changes
+git add scripts/estimate_ols.R
+
+# Commit with a message
+git commit -m "create ols regression"
+
+# Push to GitHub
+git push origin main
+```
+## What to track & not track
+
+**Track:**
+
+- Code/Prose (`.R`, `.py`, `.qmd`)
+- Documentation (`README.md`, `.txt`), configuration files ...
+
+**Not to track (`.gitignore`):**
+
+- Large data, binary files (`.xlsx`, `.shp`, `.db`)
+- Generated outputs (PDFs, figs)
+- [Sensitive info]{.red}, cache folders ...
+
+:::
+
+## 3. Dependency Management
+
+Our analysis depends on specific package versions.
+
+**The problem:**
+
+- Package updates can break our code
+- Collaborators have different versions
+- "It works on my machine"
+
+----
+
+::: {.panel-tabset}
+## Python dep mgt with `uv`
+
+```bash
+# Create a new project (creates pyproject.toml)
+uv init my-project
+
+# Add dependencies (creates/updates uv.lock)
+uv add pandas matplotlib statsmodels
+
+# Run scripts (auto-creates venv, installs deps)
+uv run python analysis.py
+
+# Restore on another machine
+uv sync  # reads uv.lock, recreates exact environment
+
+uv manages everything: venv, dependencies, lockfile.
+```
+See <https://docs.astral.sh/uv/>
+
+
+## `renv` for R
+
+`renv` creates isolated, reproducible R environments.
+
+```r
+# Initialize renv in your project
+renv::init()
+
+# Install packages as usual
+install.packages("data.table")
+
+# Snapshot your dependencies
+renv::snapshot()  # Creates renv.lock
+
+# Restore on another machine
+renv::restore()
+```
+See <https://rstudio.github.io/renv/>
+:::
+
+## 4. Literate Programming with Quarto
+
+Combine code, results, and narrative in one document.
+
+**Benefits:**
+
+- No copy-paste errors
+- Results update automatically
+- Single source of truth
+
+## What is Quarto?
+
+An open-source scientific and technical publishing system.
+
+- Write in **Markdown** (plain text)
+
+![Quarto Process *Graphic: rdatatoolbox*](docs/images/quarto-process.png){width="75%"}
+
+- Embed code: **Python**, **R**, Julia, Observable, Mermaid
+- Render to **HTML**, **PDF**, **Word**, slides, websites, books
+
+
+## Quarto Document Structure {.smaller .scrollable}
+
+````markdown
+---
+title: "House prices dynamic in the Netherlands"
+author: Eyayaw Beze
+date: last-modified
+format: pdf
+---
+
+```{{r}}
+#| label: setup
+library(data.table)
+library(ggplot2)
+
+# Constants
+start_year = 2005
+end_year = 2025 # max(data$year)
+```
+
+## Introduction
+
+We analyze housing prices in the Netherlands from `{r} start_year` to `{r} end_year` period.
+
+```{{r}}
+#| label: import-data
+data = fread("data/processed/prices.csv")
+```
+## Data
+We use a novel data from CBS with `{r} nrow(unique(data))` unique transactions.
+The summary statistics of the dataset is shown in @tbl-descriptive-stats.
+In `{r} start_year` the average house price was `{r} data[year==start_year, mean(price_real)]`.
+
+```{{r}}
+#| label: tbl-descriptive-stats
+
+desc_stats = data[, .(
+  min = min(price_real),
+  mean = mean(price_real),
+  median = quantile(price_real, 0.5),
+  q3 = quantile(price_real, 0.75),
+  max = max(price_real),
+  sd = var(price_real) ** 0.5
+  )]
+
+knitr::kable(desc_stats)
+```
+````
+
+# Demo {background-color="#2d2d2d"}
+
+[*Brief demo of quarto features:*]{.red}
+
+[*Trends of property values in the Netherlands across Municipalities using Waardering Onroerende Zaken (WOZ)*]{.green}
+
+## Let's see Quarto in Action
+
+We'll analysis housing price trends in the Netherlands using WOZ data.
+
+- Load data from CSV
+- Exploratory visualizations
+- Regression with inline results
+- Cross-references and citations
+- Render to HTML and PDF
+
+File: `./demo/woz_analysis.qmd`
+
+## Modular Chapter Organization
+
+You can organize by sections/chs
+
+```sh
+article/
+├── _quarto.yml
+├── 00-abstract.qmd
+├── 01-intro.qmd
+├── 02-literature.qmd
+├── 03-method.qmd
+├── 04-data.qmd
+├── 05-results.qmd
+├── 06-conclusion.qmd
+├── 07-references.qmd
+├── 08-appendix.qmd
+├── index.qmd
+└── references.bib
+```
+
+## Lessons Learned
+::: columns
+::: column
+**Starting simple + consistency**
+
+- Organize files consistently
+- Use Git (even just locally as a single author)
+- Document your code, write a README
+- Separate raw data from processed data
+- Record data sources, keep a data dictionary
+:::
+::: column
+**Common Pitfalls**
+
+- Hardcoded file paths (`C:\Users\...`)
+- Not tracking package versions
+- Modifying raw data directly
+- Giant monolithic scripts
+- Forgetting to commit/push
+:::
+:::
+
+## Resources
+
+**Quarto**
+
+- [Quarto Guide](https://quarto.org/docs/guide/)
+- [Quarto Gallery](https://quarto.org/docs/gallery/)
+- [Awesome Quarto](https://github.com/mcanouil/awesome-quarto)
+
+**Git**
+
+- [Git for Scientists](https://swcarpentry.github.io/git-novice/)
+- [Happy Git with R](https://happygitwithr.com/)
+- [Pro Git Book](https://git-scm.com/book/en/v2)
+
+
+## Summary
+
+| Practice | Tool |
+|----------|------|
+| Directory structure | Cookiecutter |
+| Version control | Git + GitHub |
+| Pkg dependencies | uv/pip/renv |
+| Literate programming | Quarto |
+
+
+## Questions?
+
+Thank you!
+
+**Contact**: <eyayaw.beze@ams-institute.org>
+
+<br>
+<br>
+
+::: callout-tip
+### Dissertation code:
+
+- Ch 1: [github.com/eyayaw/housing-supply-elasticity-in-germany](https://github.com/eyayaw/housing-supply-elasticity-in-germany)
+- Ch 2: [github.com/eyayaw/de-donut-effect](https://github.com/eyayaw/de-donut-effect)
+- Ch 3: [github.com/eyayaw/the-monocentric-city-gradients-addis-ababa](https://github.com/eyayaw/the-monocentric-city-gradients-addis-ababa)
+:::

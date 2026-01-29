@@ -1,0 +1,342 @@
+---
+title: "Dutch Property Values: A Municipal Analysis"
+# subtitle: "Analyzing WOZ Trends Across the Netherlands (2016-2024)"
+subtitle: "Analyzing WOZ Trends Across the Netherlands ({{< var start_year >}} - {{< var end_year >}})"
+author: "Reproducible Research Demo"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    fig-width: 8
+    fig-height: 5
+    #embed-resources: true # tampers with embed-preview.html
+    theme: cosmo
+  pdf:
+    link-citations: true
+    colorlinks: true
+    echo: false
+execute:
+  warning: false
+  message: false
+bibliography: references.bib
+number-sections: true
+---
+
+```{r}
+#| label: setup
+
+library(data.table)
+library(ggplot2)
+library(sf)
+library(fixest)
+
+# Defines START_YEAR and END_YEAR
+source("scripts/constants.R")
+
+# Define major (G4) cities with their gemeente codes
+G4_CITIES = data.table::rowwiseDT(
+  region=, name=,color=,
+  "GM0363", "Amsterdam", "#1b9e77",
+  "GM0599", "Rotterdam", "#d95f02",
+  "GM0518", "Den Haag", "#7570b3",
+  "GM0344", "Utrecht", "#e7298a"
+)
+```
+
+::: callout-warning
+## Not a real research!
+
+Don't mind the narrative but the data is real.
+:::
+
+## Introduction
+
+The Dutch housing market has experienced remarkable changes over the past decade. Property values, as measured by the WOZ (*Waardering Onroerende Zaken*) valuations, serve as a key indicator of real estate market dynamics [@devries_2009]. These official government valuations are used for property taxation and reflect market conditions across municipalities.
+
+This analysis examines the evolution of property values across Dutch municipalities using data from Statistics Netherlands (CBS). We address the research question:
+
+> **How have property values evolved across Dutch municipalities since `{r} START_YEAR`, and what spatial patterns emerge?**
+
+Our analysis uses R for data processing, statistical modeling, and visualization, demonstrating Quarto's capabilities for reproducible research.
+
+## Data
+
+We use the CBS *Kerncijfers Wijken en Buurten* (Key Figures for Neighborhoods and Districts) dataset [@cbs_kwb_2024], which provides annual statistics at the municipality (gemeente) level.
+
+
+```{r}
+#| label: import-data
+#| code-fold: false
+
+# Load CBS housing data
+housing = fread(file.path("data", "processed", "kwb_housing.csv"))
+# Keep only from START_YEAR to END_YEAR
+housing = housing[year >= START_YEAR & year <= END_YEAR, ]
+# Filter to gemeente level with valid WOZ data
+housing_municip = housing[region_type == "gemeente" & !is.na(woz), ]
+
+# Summary statistics
+n_gem = uniqueN(housing_municip$region)
+year_range = range(housing_municip$year)
+n_obs = nrow(housing_municip)
+```
+
+```{r}
+#| label: guard-against-non-existent-filters
+#| output: asis
+##| eval: !expr 'START_YEAR != year_range[1] || END_YEAR != year_range[2]'
+
+# Redefine start and end year based on data
+start_year_old = START_YEAR
+end_year_old = END_YEAR
+START_YEAR = max(year_range[1], START_YEAR)
+END_YEAR = min(year_range[2], END_YEAR)
+if (START_YEAR != start_year_old || END_YEAR != end_year_old) {
+  cat(sprintf('WARNING: [Adjusted analysis period to %s-%s based on data availability, you defined [%s, %s].]{style="color:red"}', START_YEAR, END_YEAR, start_year_old, end_year_old))
+}
+```
+
+The dataset contains `{r} format(n_obs, big.mark = ",")` observations covering `{r} n_gem` municipalities from `{r} year_range[1]` to `{r} year_range[2]`.
+
+```{r}
+#| label: tbl-data-summary
+#| tbl-cap: "Data summary by year"
+
+summary_by_year = housing_municip[, .(
+  Municipalities = uniqueN(region),
+  `Mean WOZ (€1000)` = sprintf("%.2f", mean(woz, na.rm = TRUE)),
+  `Median WOZ` = sprintf("%.2f", median(woz, na.rm = TRUE)),
+  `Min WOZ` = min(woz, na.rm = TRUE),
+  `Max WOZ` = max(woz, na.rm = TRUE)
+), by = year]
+
+knitr::kable(summary_by_year)
+```
+
+Beyond WOZ values, the dataset includes housing stock composition (see @fig-housing-stock in the @sec-appendix).
+
+## WOZ Trends
+
+### Growth Rate Methodology
+
+We calculate the percentage growth in WOZ values for each municipality using the formula:
+
+$$
+g_i = \frac{\text{WOZ}_{i,t_1} - \text{WOZ}_{i,t_0}}{\text{WOZ}_{i,t_0}} \times 100
+$$ {#eq-growth}
+
+where $g_i$ represents the total percentage growth for municipality $i$ over the `{r} START_YEAR`--`{r} END_YEAR` period.
+
+### Major Cities
+
+@fig-woz-trends shows the evolution of property values in the `{r} nrow(G4_CITIES)` largest Dutch cities (G4): `{r} knitr::combine_words(G4_CITIES[["name"]])` .
+
+```{r}
+#| label: fig-woz-trends
+#| fig-cap: !expr 'sprintf("WOZ Value Trends in Major Dutch Cities (%s-%s)", START_YEAR, END_YEAR)'
+
+# Filter and join
+g4_data = housing_municip[G4_CITIES, on = "region", nomatch = 0]
+
+# Plot
+ggplot(g4_data, aes(x = year, y = woz, color = name)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  scale_color_brewer(palette = "Set1") +
+  scale_x_continuous(breaks = seq(START_YEAR, END_YEAR, 2)) +
+  scale_y_continuous(labels = scales::label_number(suffix = "k")) +
+  labs(
+    x = "Year",
+    y = "WOZ Value (€1000)",
+    color = "City"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    panel.grid.minor = element_blank()
+  )
+```
+
+```{r}
+#| label: compute-top-municipality
+# Identify most expensive city in END_YEAR
+expensive_city = g4_data[year == END_YEAR, ][which.max(woz), ]
+expensive_city_name = expensive_city[, name]
+expensive_city_woz = expensive_city[, woz]
+```
+
+`{r} expensive_city_name` shows the highest property values throughout the period, with WOZ values reaching €`{r} expensive_city_woz`k in `{r} END_YEAR`. The gap between `{r} expensive_city_name` and other cities has remained substantial.
+
+
+```{r}
+#| label: growth-calculation
+
+# Calculate growth rates
+growth_rates = dcast(
+  housing_municip[year %in% c(START_YEAR, END_YEAR), .(region, year, woz)],
+  region ~ year,
+  value.var = "woz"
+)
+setnames(growth_rates, as.character(c(START_YEAR, END_YEAR)), c("woz_start", "woz_end"))
+growth_rates = growth_rates[!is.na(woz_start) & !is.na(woz_end)]
+growth_rates[, growth_pct := (woz_end - woz_start) / woz_start * 100]
+
+# G4 growth rates
+g4_growth = growth_rates[G4_CITIES, on = "region", nomatch = 0]
+setorder(g4_growth, -growth_pct)
+```
+
+The growth rates for the G4 cities between `{r} START_YEAR` and `{r} END_YEAR` are:
+
+```{r}
+#| label: tbl-g4-growth
+#| tbl-cap: !expr 'paste0("WOZ Growth in Major Cities (", START_YEAR, "-", END_YEAR, ")")'
+
+g4_table = g4_growth[, .(
+  City = name,
+  woz_start,
+  woz_end,
+  `Growth (%)` = round(growth_pct, 1)
+)]
+setnames(g4_table, c("woz_start", "woz_end"),
+         c(paste("WOZ", START_YEAR), paste("WOZ", END_YEAR)))
+
+knitr::kable(g4_table)
+```
+
+## Regression Analysis
+
+To estimate the average annual growth rate across municipalities while controlling for municipal fixed effects, we estimate a panel regression model. Similar approaches using hedonic pricing models have been applied to Dutch real estate appraisals [@guliker_etal_2022]. We estimate:
+
+$$
+\log(\text{WOZ}_{it}) = \alpha + \beta \cdot t + \gamma_i + \varepsilon_{it}
+$$ {#eq-regression}
+
+where:
+
+- $\text{WOZ}_{it}$ is the WOZ value for municipality $i$ in year $t$
+- $\beta$ captures the average annual growth rate (in log points)
+- $\gamma_i$ are municipality fixed effects
+- $\varepsilon_{it}$ is the error term
+
+```{r}
+#| label: regression
+
+# Prepare panel data
+panel = copy(housing_municip)
+panel[, `:=`(
+  log_woz = log(woz * 1000),
+  year_centered = year - START_YEAR  # Center year for interpretation
+)]
+
+# Fixed effects regression
+fe_model = feols(log_woz ~ year_centered | region, data = panel)
+
+# Extract coefficient
+beta = coef(fe_model)["year_centered"]
+annual_growth_pct = (exp(beta) - 1) * 100
+```
+
+The regression results indicate an average annual growth rate of **`{r} round(annual_growth_pct, 1)`%** in WOZ values across Dutch municipalities (see @eq-regression). This estimate is based on `{r} format(nobs(fe_model), big.mark = ",")` observations across `{r} uniqueN(panel$region)` municipalities.
+
+```{r}
+#| label: tbl-regression
+#| tbl-cap: "Panel Regression Results"
+#| output: !expr 'if (knitr::is_latex_output()) "asis" else "true"'
+
+# Summary table
+etable(fe_model, se = "cluster", cluster = ~region, tex = knitr::is_latex_output(),
+      dict = c(year_centered = sprintf("Year (from %s)", START_YEAR)))
+```
+
+## Spatial Distribution
+
+@fig-woz-map shows the geographic distribution of WOZ values across Dutch municipalities in `{r} END_YEAR`.
+
+```{r}
+#| label: fig-woz-map
+#| fig-cap: !expr 'paste0("WOZ Values by Municipality (", END_YEAR, ")")'
+#| fig-height: 8
+
+# Read spatial data
+gem_sf = st_read("data/geodata/gemeenten_2024.gpkg", quiet = TRUE)
+
+# Prepare WOZ data for end year
+woz_end = housing_municip[year == END_YEAR, .(gemeentecode = region, woz)]
+
+# Join spatial and attribute data
+map_data = merge(gem_sf, woz_end, by = "gemeentecode", all.x = TRUE)
+
+# Create choropleth map
+ggplot(map_data) +
+  geom_sf(aes(fill = woz), color = "white", linewidth = 0.1) +
+  scale_fill_viridis_c(
+    option = "plasma",
+    na.value = "grey80",
+    labels = scales::label_number(suffix = "k"),
+    guide = guide_colorbar(
+      title = "WOZ (€1000)",
+      title.position = "top",
+      barwidth = 15,
+      barheight = 0.5
+    )
+  ) +
+  labs(
+    title = "Property Values Across Dutch Municipalities",
+    subtitle = paste("WOZ valuations in", END_YEAR)
+  ) +
+  theme_void(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "grey40")
+  )
+```
+
+The map @fig-woz-map reveals clear spatial patterns: the Randstad region (Amsterdam, Utrecht, The Hague) and areas around Haarlem show the highest property values, while peripheral regions in the north and east have lower valuations [@claassens_2020].
+
+## Compound Annual Growth Rate (CAGR) Analysis
+
+Beyond simple growth rates, we can calculate the Compound Annual Growth Rate [CAGR; @cipra_2010], which provides a smoothed annual rate of return:
+
+$$
+\text{CAGR} = \left( \frac{\text{WOZ}_{t_1}}{\text{WOZ}_{t_0}} \right)^{1/n} - 1
+$$
+
+where $n$ = `{r} END_YEAR-START_YEAR` years.
+
+::: callout-note
+The following figure is embedded from a separate analysis document using Quarto's [`embed`](https://quarto.org/docs/authoring/notebook-embed.html) shortcode, demonstrating modular workflows:
+:::
+
+{{< embed summary.qmd#fig-cagr-distribution >}}
+
+## Conclusion
+
+This analysis of Dutch property values reveals several key findings:
+
+1. **Substantial growth**: WOZ values increased by an average of `{r} round(annual_growth_pct, 1)`% annually between `{r} year_range[1]` and `{r} year_range[2]`
+2. **Urban premium**: Major cities, particularly Amsterdam, maintain significantly higher property values [@musterd_2020]
+3. **Spatial patterns**: Clear geographic clustering with highest values in the Randstad region
+
+These insights have implications for policymakers, urban planners, and real estate stakeholders in understanding market dynamics and guiding future development.
+
+## References {.unnumbered}
+
+::: {#refs}
+:::
+
+## Appendix {#sec-appendix .appendix}
+
+### Housing Stock Trends
+
+@fig-housing-stock shows trends in housing stock composition for the G4 cities.
+
+{{< embed housing_stock.qmd#fig-housing-stock >}}
+
+::: callout-note
+@fig-housing-stock is produced using Python and embedded via Quarto's `embed` shortcode---demonstrating multi-language workflows.
+:::
